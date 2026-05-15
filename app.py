@@ -1,197 +1,126 @@
 import streamlit as st
-import sqlite3
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 from datetime import date
 import base64
 from PIL import Image
 import io
-import pandas as pd
 
-# Configuracion de la pagina con diseño ancho
-st.set_page_config(layout="wide", page_title="Gothic Nail Manager")
+# Configuracion de la pagina
+st.set_page_config(layout="wide", page_title="Gothic Nail Manager Cloud")
 
-# Inyeccion de CSS para estilo gotico (Negro, Rojo Sangre y Morado)
+# Estilo Gotico
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #0d0d0d;
-        color: #e0e0e0;
-    }
-    h1, h2, h3 {
-        color: #8b0000 !important;
-        font-family: 'Georgia', serif;
-        text-shadow: 2px 2px 4px #000000;
-    }
-    section[data-testid="stSidebar"] {
-        background-color: #1a1a1a;
-        border-right: 1px solid #4b0082;
-    }
-    .stButton>button {
-        background-color: #4b0082;
-        color: white;
-        border-radius: 0px;
-        border: 1px solid #8b0000;
-        width: 100%;
-    }
-    .stButton>button:hover {
-        background-color: #8b0000;
-        border: 1px solid #4b0082;
-    }
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
-        background-color: #1a1a1a;
-        color: #e0e0e0;
-        border: 1px solid #4b0082;
-    }
+    .stApp { background-color: #0d0d0d; color: #e0e0e0; }
+    h1, h2, h3 { color: #8b0000 !important; font-family: 'Georgia', serif; }
+    section[data-testid="stSidebar"] { background-color: #1a1a1a; border-right: 1px solid #4b0082; }
+    .stButton>button { background-color: #4b0082; color: white; border: 1px solid #8b0000; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
-# Procesamiento de imagenes a Base64 para almacenamiento en SQLite
+# Conexion a Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Funciones de Imagen
 def imagen_a_base64(imagen_archivo):
     if imagen_archivo is not None:
         try:
             img = Image.open(imagen_archivo)
-            img.thumbnail((500, 500))
+            img.thumbnail((400, 400))
             buffered = io.BytesIO()
             img.save(buffered, format="PNG", optimize=True)
             return base64.b64encode(buffered.getvalue()).decode()
         except:
-            return None
-    return None
+            return ""
+    return ""
 
-# Inicializacion de tablas en la base de datos control_unas.db
-def inicializar_db():
-    conn = sqlite3.connect('control_unas.db')
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Clientes (
-            id_cliente INTEGER PRIMARY KEY AUTOINCREMENT, 
-            nombre TEXT UNIQUE, 
-            telefono TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Trabajos (
-            id_trabajo INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_cliente INTEGER,
-            fecha TEXT,
-            tecnica TEXT,
-            precio REAL,
-            foto_diseno TEXT, 
-            observaciones TEXT,
-            FOREIGN KEY(id_cliente) REFERENCES Clientes(id_cliente)
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-# Funcion centralizada para ejecucion de consultas SQL
-def ejecutar_query(query, params=(), fetch=False, fetchall=False, return_id=False):
-    conn = sqlite3.connect('control_unas.db')
-    cursor = conn.cursor()
-    cursor.execute(query, params)
-    if return_id:
-        res = cursor.lastrowid
-        conn.commit()
-    elif fetchall:
-        res = cursor.fetchall()
-    elif fetch:
-        res = cursor.fetchone()
-    else:
-        conn.commit()
-        res = None
-    conn.close()
-    return res
-
-inicializar_db()
-
-# Navegacion lateral
-st.sidebar.title("Nail Control Noir")
+# Navegacion
+st.sidebar.title("Nail Control Cloud")
 opcion = st.sidebar.radio("Navegacion:", ["Buscar Clienta", "Registrar Trabajo", "Tablero de Analisis"])
 
-# Seccion 1: Busqueda de historial y galeria visual
+# 1. BUSCAR Y VER HISTORIAL
 if opcion == "Buscar Clienta":
-    st.title("Expediente de Clientas")
-    nom_b = st.text_input("Ingresa el nombre a buscar:").strip().lower()
+    st.title("Expediente Digital")
+    nom_b = st.text_input("Nombre de la clienta:").strip().lower()
     
     if nom_b:
-        cliente = ejecutar_query("SELECT * FROM Clientes WHERE nombre LIKE ?", (f'%{nom_b}%',), fetch=True)
-        if cliente:
-            st.header(f"Clienta: {cliente[1].upper()}")
-            trabajos = ejecutar_query("SELECT fecha, tecnica, precio, foto_diseno, observaciones FROM Trabajos WHERE id_cliente = ? ORDER BY fecha DESC", (cliente[0],), fetchall=True)
+        df_clientes = conn.read(worksheet="Clientes")
+        cliente = df_clientes[df_clientes['nombre'].str.contains(nom_b, case=False, na=False)]
+        
+        if not cliente.empty:
+            id_c = cliente.iloc[0]['id_cliente']
+            st.header(f"Clienta: {cliente.iloc[0]['nombre'].upper()}")
             
-            if trabajos:
-                for t in trabajos:
+            df_trabajos = conn.read(worksheet="Trabajos")
+            trabajos = df_trabajos[df_trabajos['id_cliente'] == id_c]
+            
+            if not trabajos.empty:
+                for _, t in trabajos.iterrows():
                     with st.container():
                         col_img, col_txt = st.columns([1, 2])
                         with col_img:
-                            if t[3]:
-                                st.image(f"data:image/png;base64,{t[3]}", use_container_width=True)
+                            if t['foto_diseno']:
+                                st.image(f"data:image/png;base64,{t['foto_diseno']}", use_container_width=True)
                         with col_txt:
-                            st.subheader(f"Fecha: {t[0]}")
-                            st.write(f"Tecnica: {t[1]}")
-                            st.write(f"Precio: ${t[2]}")
-                            st.info(f"Notas: {t[4]}")
+                            st.subheader(f"Fecha: {t['fecha']}")
+                            st.write(f"Tecnica: {t['tecnica']} | Precio: ${t['precio']}")
+                            st.info(f"Notas: {t['observaciones']}")
                         st.divider()
             else:
-                st.write("No existen registros previos para esta clienta.")
+                st.write("No hay trabajos registrados.")
         else:
-            st.warning("La clienta no se encuentra en la base de datos.")
+            st.warning("No encontrada.")
 
-# Seccion 2: Registro de nuevas sesiones y clientes
+# 2. REGISTRAR TRABAJO
 elif opcion == "Registrar Trabajo":
-    st.title("Nueva Sesion de Trabajo")
-    nombre_input = st.text_input("Nombre de la clienta:").strip().lower()
+    st.title("Nueva Sesion")
+    nombre_input = st.text_input("Nombre:").strip().lower()
     
     if nombre_input:
-        existe = ejecutar_query("SELECT id_cliente FROM Clientes WHERE nombre = ?", (nombre_input,), fetch=True)
-        with st.form("form_registro", clear_on_submit=True):
-            if not existe:
-                st.info("Nueva clienta detectada en el sistema.")
-                tel = st.text_input("Telefono de contacto:")
-            else:
-                st.success("Clienta reconocida.")
-                tel = None
-
-            col1, col2 = st.columns(2)
-            with col1:
-                tecnica = st.selectbox("Tecnica aplicada", ["Acritico", "Retoque", "Gelish", "Polygel", "Soft Gel", "Retiro"])
-                precio = st.number_input("Costo del servicio", min_value=0.0, step=50.0)
-            with col2:
-                fecha = st.date_input("Fecha", date.today())
-                foto = st.file_uploader("Subir evidencia del diseno", type=["jpg", "png", "jpeg"])
+        df_clientes = conn.read(worksheet="Clientes")
+        existe = df_clientes[df_clientes['nombre'] == nombre_input]
+        
+        with st.form("registro"):
+            tel = st.text_input("Telefono:") if existe.empty else None
+            tecnica = st.selectbox("Tecnica", ["Acritico", "Retoque", "Gelish", "Polygel", "Soft Gel"])
+            precio = st.number_input("Precio", min_value=0.0)
+            fecha = st.date_input("Fecha", date.today())
+            foto = st.file_uploader("Foto del diseno", type=["jpg", "png"])
+            obs = st.text_area("Observaciones")
             
-            obs = st.text_area("Detalles del servicio (colores, decoracion, etc.)")
-            
-            if st.form_submit_button("Guardar en Historial"):
-                if not existe:
-                    id_c = ejecutar_query("INSERT INTO Clientes (nombre, telefono) VALUES (?,?)", (nombre_input, tel), return_id=True)
+            if st.form_submit_button("Guardar"):
+                # Si es nueva, agregar a Clientes
+                if existe.empty:
+                    new_id = len(df_clientes) + 1
+                    new_cliente = pd.DataFrame([{"id_cliente": new_id, "nombre": nombre_input, "telefono": tel}])
+                    df_clientes = pd.concat([df_clientes, new_cliente], ignore_index=True)
+                    conn.update(worksheet="Clientes", data=df_clientes)
                 else:
-                    id_c = existe[0]
+                    new_id = existe.iloc[0]['id_cliente']
                 
+                # Agregar a Trabajos
+                df_trabajos = conn.read(worksheet="Trabajos")
                 img_str = imagen_a_base64(foto)
-                ejecutar_query("""
-                    INSERT INTO Trabajos (id_cliente, fecha, tecnica, precio, foto_diseno, observaciones) 
-                    VALUES (?,?,?,?,?,?)
-                """, (id_c, str(fecha), tecnica, precio, img_str, obs))
-                st.success("El registro ha sido sellado correctamente.")
+                new_trabajo = pd.DataFrame([{
+                    "id_trabajo": len(df_trabajos) + 1,
+                    "id_cliente": new_id,
+                    "fecha": str(fecha),
+                    "tecnica": tecnica,
+                    "precio": precio,
+                    "foto_diseno": img_str,
+                    "observaciones": obs
+                }])
+                df_trabajos = pd.concat([df_trabajos, new_trabajo], ignore_index=True)
+                conn.update(worksheet="Trabajos", data=df_trabajos)
+                st.success("Guardado en la nube.")
 
-# Seccion 3: Analisis de datos con Pandas
+# 3. TABLERO DE ANALISIS
 elif opcion == "Tablero de Analisis":
-    st.title("Analisis de Rendimiento")
-    datos = ejecutar_query("SELECT fecha, precio, tecnica FROM Trabajos", fetchall=True)
-    
-    if datos:
-        df = pd.DataFrame(datos, columns=['Fecha', 'Precio', 'Tecnica'])
-        df['Fecha'] = pd.to_datetime(df['Fecha'])
-        
-        col_met1, col_met2 = st.columns(2)
-        col_met1.metric("Ingresos Totales acumulados", f"${df['Precio'].sum():,.2f}")
-        col_met2.metric("Numero Total de Servicios", len(df))
-        
-        st.subheader("Flujo de Ingresos por Tiempo")
-        ventas_fecha = df.groupby('Fecha')['Precio'].sum()
-        st.line_chart(ventas_fecha)
-        
-        st.subheader("Distribucion por Tecnica")
-        st.bar_chart(df['Tecnica'].value_counts())
+    st.title("Analisis de Datos UAQ")
+    df = conn.read(worksheet="Trabajos")
+    if not df.empty:
+        st.metric("Ingresos Totales", f"${df['precio'].sum():,.2f}")
+        st.bar_chart(df['tecnica'].value_counts())
     else:
-        st.write("Datos insuficientes para generar graficas de analisis.")
+        st.write("Sin datos.")
