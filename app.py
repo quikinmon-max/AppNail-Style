@@ -83,7 +83,7 @@ elif opcion == "Registrar Trabajo":
         
         with st.form("registro"):
             tel = st.text_input("Telefono:") if existe.empty else None
-            tecnica = st.selectbox("Tecnica", ["Acritico", "Retoque", "Gelish", "Polygel", "Soft Gel"])
+            tecnica = st.selectbox("Tecnica", ["Acrilico", "Retoque", "Gelish", "Polygel", "Soft Gel", "Tip"])
             precio = st.number_input("Precio", min_value=0.0)
             fecha = st.date_input("Fecha", date.today())
             foto = st.file_uploader("Foto del diseno", type=["jpg", "png"])
