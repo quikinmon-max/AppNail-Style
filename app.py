@@ -119,4 +119,66 @@ elif opcion == "Alta de Servicio / Ficha Técnica":
                         "foto_perfil": imagen_a_base64(c_foto),
                         "fecha_alta": str(date.today())
                     })
-                    id_c = res_c.inserted_
+                    id_c = res_c.inserted_id
+                else:
+                    id_c = cliente_existente["_id"]
+                
+                trabajos_col.insert_one({
+                    "id_cliente": id_c,
+                    "fecha": str(f_fecha),
+                    "tecnica": f_tecnica,
+                    "precio": f_precio,
+                    "foto": imagen_a_base64(f_foto),
+                    "obs": f_obs
+                })
+                st.success("¡Datos sincronizados con MongoDB Atlas!")
+
+# --- MÓDULO 3: GESTIÓN (Ver y Eliminar por Número) ---
+elif opcion == "Gestión de Base de Datos":
+    st.title("⚙️ Administración de Clientas")
+    
+    todos = list(clientes_col.find().sort("nombre", 1))
+    
+    if todos:
+        # Generamos la lista numerada dinámicamente
+        data_lista = []
+        for i, c in enumerate(todos, 1):
+            data_lista.append({
+                "No.": i,
+                "Nombre": c['nombre'].upper(),
+                "Teléfono": c.get('telefono', 'N/A'),
+                "_id": c['_id']
+            })
+        
+        df_ver = pd.DataFrame(data_lista).drop(columns=['_id'])
+        st.table(df_ver)
+        
+        st.markdown("---")
+        st.subheader("🗑️ Eliminar por Número de Registro")
+        num_eliminar = st.number_input("Escribe el No. de la clienta a eliminar:", 
+                                       min_value=1, 
+                                       max_value=len(data_lista), 
+                                       step=1)
+        
+        cliente_ref = data_lista[num_eliminar - 1]
+        st.error(f"¿Confirmas que deseas eliminar a **{cliente_ref['Nombre']}**? Se borrará TODO su historial.")
+        
+        if st.button(f"BORRAR NÚMERO {num_eliminar}"):
+            trabajos_col.delete_many({"id_cliente": cliente_ref['_id']})
+            clientes_col.delete_one({"_id": cliente_ref['_id']})
+            st.success("Registro eliminado. La lista se ha reordenado.")
+            st.rerun()
+    else:
+        st.info("Base de datos vacía.")
+
+# --- MÓDULO 4: ESTADÍSTICAS ---
+elif opcion == "Estadísticas":
+    st.title("📊 Análisis de Consultoría")
+    servicios = list(trabajos_col.find())
+    if servicios:
+        df = pd.DataFrame(servicios)
+        st.metric("Ingresos Totales", f"${df['precio'].sum():,.2f}")
+        st.write("### Técnicas más Vendidas")
+        st.bar_chart(df['tecnica'].value_counts())
+    else:
+        st.info("Sin datos suficientes.")
