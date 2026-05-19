@@ -1,15 +1,14 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+from pymongo import MongoClient
 import pandas as pd
 from datetime import date
 import base64
 from PIL import Image
 import io
 
-# Configuracion de la pagina
-st.set_page_config(layout="wide", page_title="Gothic Nail Manager Cloud")
+# 1. Configuración de Estilo y Página
+st.set_page_config(layout="wide", page_title="Nail Manager Pro")
 
-# Estilo Gotico
 st.markdown("""
     <style>
     .stApp { background-color: #0d0d0d; color: #e0e0e0; }
@@ -19,108 +18,115 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Conexion a Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+# 2. Conexión a MongoDB Atlas (Usando Secrets)
+@st.cache_resource
+def init_connection():
+    # Esta línea jala la URL que pegaste en los Secrets de Streamlit
+    return MongoClient(st.secrets["mongo"]["uri"])
 
-# Funciones de Imagen
+try:
+    client = init_connection()
+    db = client.estetica_nails
+    clientes_col = db.clientes
+    trabajos_col = db.trabajos
+except Exception as e:
+    st.error(f"Error de conexión a la base de datos: {e}")
+
+# 3. Función para procesar imágenes
 def imagen_a_base64(imagen_archivo):
-    if imagen_archivo is not None:
-        try:
-            img = Image.open(imagen_archivo)
-            img.thumbnail((400, 400))
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG", optimize=True)
-            return base64.b64encode(buffered.getvalue()).decode()
-        except:
-            return ""
-    return ""
+    if imagen_archivo:
+        img = Image.open(imagen_archivo)
+        # Optimizamos el tamaño para no saturar la base de datos gratuita
+        img.thumbnail((500, 500))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+    return None
 
-# Navegacion
-st.sidebar.title("Nail Control Cloud")
-opcion = st.sidebar.radio("Navegacion:", ["Buscar Clienta", "Registrar Trabajo", "Tablero de Analisis"])
+# 4. Interfaz de Navegación
+opcion = st.sidebar.radio("Menú Principal", ["Buscador de Clientas", "Registrar Nuevo Servicio", "Análisis de Ventas"])
 
-# 1. BUSCAR Y VER HISTORIAL
-if opcion == "Buscar Clienta":
-    st.title("Expediente Digital")
-    nom_b = st.text_input("Nombre de la clienta:").strip().lower()
+# --- MÓDULO: BUSCADOR ---
+if opcion == "Buscador de Clientas":
+    st.title("🔎 Consultoría de Historial")
+    nombre_busqueda = st.text_input("Ingresa el nombre de la clienta:").strip().lower()
     
-    if nom_b:
-        df_clientes = conn.read(worksheet="Clientes")
-        cliente = df_clientes[df_clientes['nombre'].str.contains(nom_b, case=False, na=False)]
-        
-        if not cliente.empty:
-            id_c = cliente.iloc[0]['id_cliente']
-            st.header(f"Clienta: {cliente.iloc[0]['nombre'].upper()}")
+    if nombre_busqueda:
+        cliente = clientes_col.find_one({"nombre": nombre_busqueda})
+        if cliente:
+            st.header(f"Expediente: {cliente['nombre'].upper()}")
+            # Traer todos los trabajos asociados a esta clienta
+            historial = list(trabajos_col.find({"id_cliente": cliente["_id"]}).sort("fecha", -1))
             
-            df_trabajos = conn.read(worksheet="Trabajos")
-            trabajos = df_trabajos[df_trabajos['id_cliente'] == id_c]
-            
-            if not trabajos.empty:
-                for _, t in trabajos.iterrows():
+            if historial:
+                for t in historial:
                     with st.container():
-                        col_img, col_txt = st.columns([1, 2])
-                        with col_img:
-                            if t['foto_diseno']:
-                                st.image(f"data:image/png;base64,{t['foto_diseno']}", use_container_width=True)
-                        with col_txt:
-                            st.subheader(f"Fecha: {t['fecha']}")
-                            st.write(f"Tecnica: {t['tecnica']} | Precio: ${t['precio']}")
-                            st.info(f"Notas: {t['observaciones']}")
-                        st.divider()
+                        col1, col2 = st.columns([1, 2])
+                        if t.get("foto"):
+                            col1.image(f"data:image/png;base64,{t['foto']}", use_container_width=True)
+                        col2.subheader(f"Fecha: {t['fecha']}")
+                        col2.write(f"**Técnica:** {t['tecnica']}")
+                        col2.write(f"**Costo:** ${t['precio']}")
+                        col2.info(f"**Notas:** {t.get('obs', 'Sin observaciones')}")
+                    st.divider()
             else:
-                st.write("No hay trabajos registrados.")
+                st.info("Esta clienta no tiene servicios registrados todavía.")
         else:
-            st.warning("No encontrada.")
+            st.warning("No se encontró ninguna clienta con ese nombre.")
 
-# 2. REGISTRAR TRABAJO
-elif opcion == "Registrar Trabajo":
-    st.title("Nueva Sesion")
-    nombre_input = st.text_input("Nombre:").strip().lower()
+# --- MÓDULO: REGISTRO ---
+elif opcion == "Registrar Nuevo Servicio":
+    st.title("💅 Registro de Cita")
+    nombre = st.text_input("Nombre de la clienta:").strip().lower()
     
-    if nombre_input:
-        df_clientes = conn.read(worksheet="Clientes")
-        existe = df_clientes[df_clientes['nombre'] == nombre_input]
+    if nombre:
+        cliente_registrado = clientes_col.find_one({"nombre": nombre})
         
-        with st.form("registro"):
-            tel = st.text_input("Telefono:") if existe.empty else None
-            tecnica = st.selectbox("Tecnica", ["Acrilico", "Retoque", "Gelish", "Polygel", "Soft Gel", "Tip"])
-            precio = st.number_input("Precio", min_value=0.0)
-            fecha = st.date_input("Fecha", date.today())
-            foto = st.file_uploader("Foto del diseno", type=["jpg", "png"])
-            obs = st.text_area("Observaciones")
+        with st.form("formulario_uñas"):
+            st.write("### Detalles del Trabajo")
+            # Si es nueva, pedimos el teléfono
+            telefono = st.text_input("Teléfono de contacto:") if not cliente_registrado else None
             
-            if st.form_submit_button("Guardar"):
-                # Si es nueva, agregar a Clientes
-                if existe.empty:
-                    new_id = len(df_clientes) + 1
-                    new_cliente = pd.DataFrame([{"id_cliente": new_id, "nombre": nombre_input, "telefono": tel}])
-                    df_clientes = pd.concat([df_clientes, new_cliente], ignore_index=True)
-                    conn.update(worksheet="Clientes", data=df_clientes)
+            tecnica = st.selectbox("Técnica aplicada", ["Acrílico", "Gelish", "Retoque", "Efecto Espejo", "Diseño Mano Alzada"])
+            precio = st.number_input("Precio del servicio", min_value=0.0, step=50.0)
+            fecha_servicio = st.date_input("Fecha", date.today())
+            foto_diseno = st.file_uploader("Subir foto del resultado", type=["jpg", "png", "jpeg"])
+            observaciones = st.text_area("Observaciones (colores, marcas de gel, etc.)")
+            
+            submit = st.form_submit_button("Guardar Permanentemente")
+            
+            if submit:
+                # 1. Asegurar que la clienta existe en la colección de clientes
+                if not cliente_registrado:
+                    nuevo_cliente = clientes_col.insert_one({"nombre": nombre, "telefono": telefono})
+                    id_cliente = nuevo_cliente.inserted_id
                 else:
-                    new_id = existe.iloc[0]['id_cliente']
+                    id_cliente = cliente_registrado["_id"]
                 
-                # Agregar a Trabajos
-                df_trabajos = conn.read(worksheet="Trabajos")
-                img_str = imagen_a_base64(foto)
-                new_trabajo = pd.DataFrame([{
-                    "id_trabajo": len(df_trabajos) + 1,
-                    "id_cliente": new_id,
-                    "fecha": str(fecha),
+                # 2. Guardar el trabajo relacionado
+                trabajos_col.insert_one({
+                    "id_cliente": id_cliente,
+                    "fecha": str(fecha_servicio),
                     "tecnica": tecnica,
                     "precio": precio,
-                    "foto_diseno": img_str,
-                    "observaciones": obs
-                }])
-                df_trabajos = pd.concat([df_trabajos, new_trabajo], ignore_index=True)
-                conn.update(worksheet="Trabajos", data=df_trabajos)
-                st.success("Guardado en la nube.")
+                    "foto": imagen_a_base64(foto_diseno),
+                    "obs": observaciones
+                })
+                st.success(f"¡Servicio para {nombre} guardado en la nube!")
 
-# 3. TABLERO DE ANALISIS
-elif opcion == "Tablero de Analisis":
-    st.title("Analisis de Datos UAQ")
-    df = conn.read(worksheet="Trabajos")
-    if not df.empty:
-        st.metric("Ingresos Totales", f"${df['precio'].sum():,.2f}")
+# --- MÓDULO: TABLERO ---
+elif opcion == "Análisis de Ventas":
+    st.title("Tablero de Control")
+    todos_trabajos = list(trabajos_col.find({}, {"_id": 0, "precio": 1, "tecnica": 1, "fecha": 1}))
+    
+    if todos_trabajos:
+        df = pd.DataFrame(todos_trabajos)
+        
+        c1, c2 = st.columns(2)
+        c1.metric("Ingresos Totales", f"${df['precio'].sum():,.2f}")
+        c2.metric("Servicios Realizados", len(df))
+        
+        st.write("### Popularidad por Técnica")
         st.bar_chart(df['tecnica'].value_counts())
     else:
-        st.write("Sin datos.")
+        st.info("Aún no hay suficientes datos para generar estadísticas.")

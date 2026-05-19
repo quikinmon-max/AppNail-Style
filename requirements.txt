@@ -1,4 +1,4 @@
 streamlit
+pandas
 Pillow
-Pandas
-st-gsheets-connection
+pymongo[srv]
