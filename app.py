@@ -56,26 +56,31 @@ if opcion == "Buscador de Clientas":
     query = st.text_input("Ingresa el nombre o parte de él:").strip()
     
     if query:
-        # Búsqueda flexible usando Regex
         resultados = list(clientes_col.find({"nombre": {"$regex": query, "$options": "i"}}))
         
         if resultados:
             for cliente in resultados:
                 with st.expander(f"👤 EXPEDIENTE: {cliente['nombre'].upper()}"):
+                    # 1. Obtener todos los servicios para el historial (Más nuevo a más viejo)
+                    servicios_nuevos = list(trabajos_col.find({"id_cliente": cliente["_id"]}).sort("fecha", -1))
+                    
+                    # 2. Calcular dinámicamente el servicio más antiguo para la fecha de alta
+                    servicio_antiguo = trabajos_col.find_one({"id_cliente": cliente["_id"]}, sort=[("fecha", 1)])
+                    fecha_inicio = servicio_antiguo["fecha"] if servicio_antiguo else "Sin servicios"
+
                     col_p1, col_p2 = st.columns([1, 2])
                     with col_p1:
                         if cliente.get("foto_perfil"):
                             st.image(f"data:image/png;base64,{cliente['foto_perfil']}", use_container_width=True)
                     with col_p2:
                         st.write(f"📞 **Teléfono:** {cliente.get('telefono', 'N/A')}")
-                        st.write(f"📅 **Cliente desde:** {cliente.get('fecha_alta', 'N/A')}")
+                        st.write(f"📅 **Cliente desde (Primer servicio):** {fecha_inicio}")
                     
                     st.markdown("---")
                     st.subheader("Historial de Trabajos")
-                    servicios = list(trabajos_col.find({"id_cliente": cliente["_id"]}).sort("fecha", -1))
                     
-                    if servicios:
-                        for s in servicios:
+                    if servicios_nuevos:
+                        for s in servicios_nuevos:
                             c1, c2 = st.columns([1, 3])
                             if s.get("foto"):
                                 c1.image(f"data:image/png;base64,{s['foto']}", use_container_width=True)
@@ -113,11 +118,11 @@ elif opcion == "Alta de Servicio / Ficha Técnica":
             
             if st.form_submit_button("Guardar en la Nube"):
                 if not cliente_existente:
+                    # Quitamos el campo estático de fecha_alta porque ya se calcula con los servicios
                     res_c = clientes_col.insert_one({
                         "nombre": nombre,
                         "telefono": c_tel,
-                        "foto_perfil": imagen_a_base64(c_foto),
-                        "fecha_alta": str(date.today())
+                        "foto_perfil": imagen_a_base64(c_foto)
                     })
                     id_c = res_c.inserted_id
                 else:
@@ -140,7 +145,6 @@ elif opcion == "Gestión de Base de Datos":
     todos = list(clientes_col.find().sort("nombre", 1))
     
     if todos:
-        # Generamos la lista numerada dinámicamente
         data_lista = []
         for i, c in enumerate(todos, 1):
             data_lista.append({
