@@ -9,8 +9,7 @@ import io
 import hashlib
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(layout="wide", page_title="Portal SaaS: Gestión de Estéticas ✂️", page_icon="👑")
-st.set_page_config(layout="wide", page_title="Nail Manager Pro")
+st.set_page_config(layout="wide", page_title="Nail Manager Pro - SaaS")
 
 # --- CONEXIÓN A MONGODB ATLAS ---
 @st.cache_resource
@@ -57,10 +56,9 @@ if st.session_state['usuario_id'] is None:
         </style>
         """, unsafe_allow_html=True)
 
-    st.title("🔐 Portal de Administración")
-    st.write("Bienvenido al centro de gestión inteligente para salones de belleza y estéticas.")
+    st.title("🔐 Portal de Administración SaaS")
     
-    tab_login, tab_registro = st.tabs(["👤 Iniciar Sesión", "🏢 Registrar Mi Negocio"])
+    tab_login, tab_registro = st.tabs(["Iniciar Sesión", "Registrar Mi Negocio"])
     
     with tab_login:
         with st.form("form_login"):
@@ -142,14 +140,12 @@ else:
         """, unsafe_allow_html=True)
 
     # 2. Menú Lateral Personalizado
-    st.sidebar.title(f"👑 {st.session_state['nombre_negocio']}")
-
     if st.session_state.get('logo'):
         st.sidebar.image(f"data:image/png;base64,{st.session_state['logo']}", use_container_width=True)
     else:
         st.sidebar.markdown(f"### 🏢 {st.session_state['nombre_negocio']}")
         
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    if st.sidebar.button("Cerrar Sesión"):
         for key in ['usuario_id', 'nombre_negocio', 'logo', 'fondo']:
             st.session_state[key] = None
         st.rerun()
@@ -162,15 +158,25 @@ else:
                               "Estadísticas Financieras",
                               "🎨 Personalizar Estética"])
 
-    # --- MÓDULO 1: BUSCADOR FLEXIBLE ---
+    # --- MÓDULO 1: BUSCADOR FLEXIBLE (CON ALERTA DE HOMÓNIMOS) ---
     if opcion == "Buscador por Nombre":
         st.title("🔎 Consultoría de Historial")
         query = st.text_input("Ingresa el nombre o fragmento a buscar:").strip()
+        
         if query:
-            resultados = list(clientes_col.find({"id_negocio": id_negocio, "nombre": {"$regex": query, "$options": "i"}}))
+            resultados = list(clientes_col.find({
+                "id_negocio": id_negocio, 
+                "nombre": {"$regex": query, "$options": "i"}
+            }))
+            
             if resultados:
+                if len(resultados) > 1:
+                    st.info(f"⚠️ Se encontraron {len(resultados)} clientas que coinciden con '{query}'. Revisa el teléfono para elegir a la correcta.")
+                
                 for cliente in resultados:
-                    with st.expander(f"👤 EXPEDIENTE: {cliente['nombre'].upper()}"):
+                    tel_diferenciador = cliente.get('telefono', 'Sin número')
+                    
+                    with st.expander(f"👤 {cliente['nombre'].upper()} | 📞 Tel: {tel_diferenciador}"):
                         servicios_nuevos = list(trabajos_col.find({"id_cliente": cliente["_id"]}).sort("fecha", -1))
                         servicio_antiguo = trabajos_col.find_one({"id_cliente": cliente["_id"]}, sort=[("fecha", 1)])
                         fecha_inicio = servicio_antiguo["fecha"] if servicio_antiguo else "Sin historial"
@@ -196,7 +202,7 @@ else:
                         else:
                             st.info("No hay servicios registrados.")
             else:
-                st.warning("No se encontraron coincidencias.")
+                st.warning("No se encontraron coincidencias en tu base de datos.")
 
     # --- MÓDULO 2: ALTA DE SERVICIO Y FICHA ---
     elif opcion == "Alta de Servicio / Ficha":
@@ -271,7 +277,7 @@ else:
         else:
             st.info("Sin datos suficientes.")
 
-    # --- MÓDULO 5: PERSONALIZACIÓN (EL NUEVO TOQUE PREMIUM) ---
+    # --- MÓDULO 5: PERSONALIZACIÓN ---
     elif opcion == "🎨 Personalizar Estética":
         st.title("🎨 Dale tu estilo a la App")
         st.write("Sube imágenes directamente para cambiar la apariencia de tu sistema.")
