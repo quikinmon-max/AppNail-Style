@@ -142,6 +142,7 @@ else:
         """, unsafe_allow_html=True)
 
     # 2. Menú Lateral Personalizado
+    st.sidebar.title(f"👑 {st.session_state['nombre_negocio']}")
     if st.session_state.get('logo'):
         st.sidebar.image(f"data:image/png;base64,{st.session_state['logo']}", use_container_width=True)
     else:
