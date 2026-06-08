@@ -10,7 +10,7 @@ import hashlib
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(layout="wide", page_title="Portal SaaS: Gestión de Estéticas ✂️", page_icon="👑")
-st.set_page_config(layout="wide", page_title="Nail Manager Pro - SaaS")
+st.set_page_config(layout="wide", page_title="Nail Manager Pro")
 
 # --- CONEXIÓN A MONGODB ATLAS ---
 @st.cache_resource
