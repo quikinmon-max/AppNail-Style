@@ -149,19 +149,12 @@ else:
     else:
         st.sidebar.markdown(f"### 🏢 {st.session_state['nombre_negocio']}")
         
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("🚪 Cerrar Sesión"):
         for key in ['usuario_id', 'nombre_negocio', 'logo', 'fondo']:
             st.session_state[key] = None
         st.rerun()
         
     st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state['usuario_id'] = None
-        st.session_state['nombre_negocio'] = None
-        st.session_state['logo'] = None
-        st.session_state['fondo'] = None
-        st.rerun()
-        
     opcion = st.sidebar.radio("Navegación", 
                              ["Buscador por Nombre", 
                               "Alta de Servicio / Ficha", 
