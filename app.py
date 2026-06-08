@@ -9,6 +9,7 @@ import io
 import hashlib
 
 # --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(layout="wide", page_title="Portal SaaS: Gestión de Estéticas ✂️", page_icon="👑")
 st.set_page_config(layout="wide", page_title="Nail Manager Pro - SaaS")
 
 # --- CONEXIÓN A MONGODB ATLAS ---
@@ -56,9 +57,10 @@ if st.session_state['usuario_id'] is None:
         </style>
         """, unsafe_allow_html=True)
 
-    st.title("🔐 Portal de Administración SaaS")
+    st.title("🔐 Portal de Administración")
+    st.write("Bienvenido al centro de gestión inteligente para salones de belleza y estéticas.")
     
-    tab_login, tab_registro = st.tabs(["Iniciar Sesión", "Registrar Mi Negocio"])
+    tab_login, tab_registro = st.tabs(["👤 Iniciar Sesión", "🏢 Registrar Mi Negocio"])
     
     with tab_login:
         with st.form("form_login"):
