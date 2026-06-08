@@ -143,6 +143,7 @@ else:
 
     # 2. Menú Lateral Personalizado
     st.sidebar.title(f"👑 {st.session_state['nombre_negocio']}")
+
     if st.session_state.get('logo'):
         st.sidebar.image(f"data:image/png;base64,{st.session_state['logo']}", use_container_width=True)
     else:
@@ -154,6 +155,13 @@ else:
         st.rerun()
         
     st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Cerrar Sesión"):
+        st.session_state['usuario_id'] = None
+        st.session_state['nombre_negocio'] = None
+        st.session_state['logo'] = None
+        st.session_state['fondo'] = None
+        st.rerun()
+        
     opcion = st.sidebar.radio("Navegación", 
                              ["Buscador por Nombre", 
                               "Alta de Servicio / Ficha", 
